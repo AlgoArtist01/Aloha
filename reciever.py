@@ -2,30 +2,52 @@
 import socket
 import os
 import time
-import threading
 from datetime import datetime
+import signal
 
 class ALOHAReceiver:
     def __init__(self, port=5005, device_id="RECV"):
         self.port = port
         self.device_id = device_id
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # bind and use a short timeout so the loop can respond to Ctrl+C
         self.sock.bind(("", port))
+        self.sock.settimeout(1.0)
         self.active_transfers = {}
         self.stats = {"received": 0, "collisions": 0, "completed": 0}
+        self.running = False
         
     def start_listening(self):
         print(f"[{self.device_id}] ALOHA Receiver listening on UDP port {self.port}")
         print(f"[{self.device_id}] Started at: {datetime.now().strftime('%H:%M:%S')}")
         print("-" * 50)
         
-        while True:
+        self.running = True
+        try:
+            while self.running:
+                try:
+                    data, addr = self.sock.recvfrom(8192)
+                except socket.timeout:
+                    # timeout to allow checking for signals/flags
+                    continue
+                except OSError:
+                    # socket closed or other OS error
+                    break
+
+                try:
+                    self.process_packet(data, addr)
+                except Exception as e:
+                    # protect listener loop from packet processing errors
+                    print(f"Error processing packet: {e}")
+        except KeyboardInterrupt:
+            print(f"\n[{self.device_id}] KeyboardInterrupt received, shutting down...")
+        finally:
+            self.running = False
             try:
-                data, addr = self.sock.recvfrom(8192)
-                self.process_packet(data, addr)
-            except KeyboardInterrupt:
-                print(f"\n[{self.device_id}] Shutting down...")
-                break
+                self.sock.close()
+            except Exception:
+                pass
+            print(f"[{self.device_id}] Socket closed. Exiting.")
                 
     def process_packet(self, data, addr):
         timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
