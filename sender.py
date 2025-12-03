@@ -73,8 +73,7 @@ if __name__ == "__main__":
     # Target all devices in demonstration network
     target_ips = [
            # Host laptop
-        "192.168.137.214",
-         "192.168.137.1" # Laptop 2
+        "192.168.137.211"  # Laptop 2
     ]
     
     sender = ALOHASender(sender_id, file_path, target_ips)
