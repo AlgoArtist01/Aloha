@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Slotted ALOHA Simulator
 
