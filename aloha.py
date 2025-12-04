@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 ALOHA combined sender/receiver
 
@@ -15,12 +15,36 @@ This single-file tool uses the same wire format as the earlier receiver:
 
 Ctrl+C is handled gracefully for both sender and receiver.
 """
-import argparse
 import os
 import socket
 import sys
 import time
+import threading
 from datetime import datetime
+
+# List of known device IPs on your local network. Update this list to match
+# the IP addresses of other devices running `aloha.py`.
+# Example: DEFAULT_TARGETS = ["192.168.1.10", "192.168.1.11"]
+DEFAULT_TARGETS = []
+
+# --- Configuration (no CLI) ---
+# Set MODE to 'recv' to run receiver, or 'send' to send a file.
+# If MODE == 'send', configure SEND_TARGETS (list) or leave empty to use DEFAULT_TARGETS.
+MODE = 'recv'            # 'recv' or 'send'
+PORT = 5005
+DEVICE_ID = 'RECV'
+
+# Send mode configuration
+SEND_TARGETS = []        # e.g. ['192.168.1.10','192.168.1.11']
+SEND_FILE = 'testfile.bin'
+SENDER_ID = 'SNDR'
+DELAY = 0.05
+CHUNK_SIZE = 7000
+
+# If SEND_TARGETS is empty, fall back to DEFAULT_TARGETS
+if MODE == 'send' and not SEND_TARGETS:
+    SEND_TARGETS = list(DEFAULT_TARGETS)
+# ------------------------------
 
 
 class ALOHAReceiver:
@@ -184,30 +208,33 @@ class ALOHASender:
                 pass
 
 
-def main():
-    parser = argparse.ArgumentParser(description='ALOHA combined sender/receiver')
-    sub = parser.add_subparsers(dest='mode', required=True)
+def run_from_config():
+    """Run sender or receiver using the static configuration at the top of this file.
 
-    recv_p = sub.add_parser('recv', help='Run as receiver')
-    recv_p.add_argument('--port', type=int, default=5005)
-    recv_p.add_argument('--device', type=str, default='RECV')
-
-    send_p = sub.add_parser('send', help='Run as sender')
-    send_p.add_argument('host', help='Target host/ip for receiver')
-    send_p.add_argument('file', help='File to send')
-    send_p.add_argument('--port', type=int, default=5005)
-    send_p.add_argument('--sender-id', type=str, default='SNDR', help='4-char sender id')
-    send_p.add_argument('--delay', type=float, default=0.05, help='Delay between packet sends (seconds)')
-    send_p.add_argument('--chunk-size', type=int, default=7000, help='Payload size per UDP packet')
-
-    args = parser.parse_args()
-
-    if args.mode == 'recv':
-        r = ALOHAReceiver(port=args.port, device_id=args.device)
+    This removes the CLI and relies on the constants defined in the configuration
+    section. It is intended for simple deployments where other devices run the
+    same script with matching `SEND_TARGETS`/`DEFAULT_TARGETS` values.
+    """
+    if MODE == 'recv':
+        r = ALOHAReceiver(port=PORT, device_id=DEVICE_ID)
         r.start_listening()
-    elif args.mode == 'send':
-        s = ALOHASender(args.host, port=args.port, sender_id=args.sender_id)
-        s.send_file(args.file, chunk_size=args.chunk_size, delay=args.delay)
+    elif MODE == 'send':
+        targets = list(SEND_TARGETS)
+        if not targets:
+            raise SystemExit('No targets configured for send mode (SEND_TARGETS or DEFAULT_TARGETS).')
+
+        threads = []
+        for tgt in targets:
+            def _send_to(tgt_addr):
+                sender = ALOHASender(tgt_addr, port=PORT, sender_id=SENDER_ID)
+                sender.send_file(SEND_FILE, chunk_size=CHUNK_SIZE, delay=DELAY)
+
+            th = threading.Thread(target=_send_to, args=(tgt,))
+            th.start()
+            threads.append(th)
+
+        for th in threads:
+            th.join()
 
 
 if __name__ == '__main__':
