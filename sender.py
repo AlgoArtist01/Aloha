@@ -63,19 +63,38 @@ class ALOHASender:
         self.sock.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python aloha_sender.py <sender_id> <file_path>")
-        sys.exit(1)
-        
-    sender_id = sys.argv[1]
-    file_path = sys.argv[2]
-    
+    # Determine sender_id (from argv or prompt)
+    if len(sys.argv) >= 2:
+        sender_id = sys.argv[1]
+    else:
+        sender_id = input("Enter sender ID: ").strip()
+
     # Target all devices in demonstration network
     target_ips = [
         "192.168.137.1",
         "192.168.137.214",
         "192.168.137.141"  # Laptop 2
     ]
-    
-    sender = ALOHASender(sender_id, file_path, target_ips)
-    sender.send_file()
+
+    # Interactive loop: ask for file or quit
+    while True:
+        user_input = input("Enter file path to send, or type 'quit' to exit: ").strip()
+        if not user_input:
+            continue
+
+        if user_input.lower() in ("quit", "q", "exit"):
+            print("Exiting sender.")
+            sys.exit(0)
+
+        file_path = user_input
+        if not os.path.isfile(file_path):
+            print(f"File not found: {file_path}")
+            continue
+
+        sender = ALOHASender(sender_id, file_path, target_ips)
+        try:
+            sender.send_file()
+        except KeyboardInterrupt:
+            print("\nTransmission interrupted by user. Returning to prompt.")
+        except Exception as e:
+            print(f"Error during send: {e}")
